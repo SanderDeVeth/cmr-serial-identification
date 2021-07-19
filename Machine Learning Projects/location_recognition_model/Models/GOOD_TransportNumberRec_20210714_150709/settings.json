@@ -1,0 +1,13 @@
+{
+  "image_height": 2338,
+  "image_width": 1700,
+  "box_height": 256,
+  "box_width": 416,
+  "epochs": 30,
+  "dropouts": 0,
+  "test_size": 0.22,
+  "random_state": 22,
+  "batch_size": 8,
+  "np_seed": 10,
+  "tf_seed": 20
+}
