@@ -76,9 +76,9 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
             y += 1
         x += 1
 
-    # dataFrame['box'].append(cv2.resize(img, (size_x, size_y)))
-    mask = cv2.resize(img, (size_x, size_y))
-    dataFrame['box'].append(mask[:, :, 1])
+    dataFrame['box'].append(cv2.resize(img, (size_x, size_y)))
+    # mask = cv2.resize(img, (size_x, size_y))
+    # dataFrame['box'].append(mask[:, :, 1])
 
     if isPlot:
         plt.subplot(1, 2, 2)
@@ -171,7 +171,7 @@ def GiveMeUnet(inputImage, numFilters=16, dropouts=0.1, doBatchNorm=True):
     u9 = tf.keras.layers.Dropout(dropouts)(u9)
     c9 = Conv2dBlock(u9, numFilters * 1, kernelSize=3, doBatchNorm=doBatchNorm)
 
-    output = tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid')(c9)
+    output = tf.keras.layers.Conv2D(3, (1, 1), activation='sigmoid')(c9)
     model = tf.keras.Model(inputs=[inputImage], outputs=[output])
     return model
 
@@ -189,8 +189,8 @@ def predict16(valMap, model, shape=256):
     predictions = model.predict(imgProc)
 
     # needs 3 layers (see "output =" in GiveMeUnet())
-    # for i in range(len(predictions)):
-    #     predictions[i] = cv2.merge((predictions[i, :, :, 0], predictions[i, :, :, 1], predictions[i, :, :, 2]))
+    for i in range(len(predictions)):
+        predictions[i] = cv2.merge((predictions[i, :, :, 0], predictions[i, :, :, 1], predictions[i, :, :, 2]))
 
     return predictions, imgProc, mask
 
@@ -198,7 +198,7 @@ def predict16(valMap, model, shape=256):
 def Plotter(img, predMask, groundTruth, show_predictions) -> object:
     plt.figure(figsize=(12, 3))
 
-    plt.subplot(1, 4, 1)
+    plt.subplot(1, 5, 1)
     plt.title('Original image')
     plt.imshow(img)
 
@@ -206,23 +206,32 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
     # filter = np.array([[-1, -1, -1], [-1, 8.99, -1], [-1, -1, -1]])
     # imgSharpen = cv2.filter2D(predMask, -1, filter)
 
-    plt.subplot(1, 4, 2)
+    plt.subplot(1, 5, 2)
     plt.title('Annotation box')
     plt.imshow(groundTruth)
 
-    plt.subplot(1, 4, 3)
+    plt.subplot(1, 5, 3)
     plt.title('Predicted serial')
     plt.imshow(predMask)
 
-    imh = predMask
-    imh[imh < 0.5] = 0
-    imh[imh > 0.5] = 1
+    overlay = predMask
+    overlay[overlay < 0.5] = 1
+    overlay[overlay > 0.5] = 0
 
-    plt.subplot(1, 4, 4)
-    plt.title('Segmented image')
-    plt.imshow(cv2.merge((imh, imh, imh)) * img)
 
-    plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction')
+    plt.subplot(1, 5, 4)
+    plt.title('overlay')
+    plt.imshow(overlay)
+    plt.savefig('Models_3_layers/TransportNumberRec_' + training_date + '/prediction')
+
+    # output = img.copy()
+    # alpha = .5
+    # cv2.addWeighted(overlay, alpha, output, 1 - alpha, 0, output)
+
+    plt.subplot(1, 5, 5)
+    plt.title('Original image')
+    plt.imshow(img)
+    plt.savefig('Models_3_layers/TransportNumberRec_' + training_date + '/prediction')
 
     if show_predictions:
         plt.show()
@@ -251,7 +260,7 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
 #         plt.subplot(i+1, 3, 3)
 #         plt.imshow(groundTruth)
 #         plt.title('actual box Position')
-#         plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction_array')
+#         plt.savefig('Models_3_layers/TransportNumberRec_' + training_date + '/prediction_array')
 #
 #     if show_predictions:
 #         plt.show()
@@ -305,7 +314,7 @@ def WriteUsedSettingsToFileInJson():
         "tf_seed": tf_seed
     }
 
-    with open('Models/TransportNumberRec_' + training_date + '/settings.json', 'w') as f:
+    with open('Models_3_layers/TransportNumberRec_' + training_date + '/settings.json', 'w') as f:
         f.write(json.dumps(dict, indent=2))
         f.close()
 
@@ -325,7 +334,7 @@ def accuracy_loss_graphs(retVal, show_graphs):
     plt.plot(retVal.history['val_loss'], label='validaton_loss')
     plt.legend()
     plt.grid(True)
-    plt.savefig('Models/TransportNumberRec_' + training_date + '/plots')
+    plt.savefig('Models_3_layers/TransportNumberRec_' + training_date + '/plots')
 
     if show_graphs:
         plt.show()
@@ -364,7 +373,7 @@ if show_annotation_plot:
 training_dropouts = 0
 training_test_size = 0.22
 training_random_state = 22
-training_epochs = 5
+training_epochs = 30
 training_batch_size = 8
 
 training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -379,7 +388,7 @@ myTransformer.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['ac
 retVal = myTransformer.fit(x_train, y_train, validation_data=(x_test, y_test), verbose=1, epochs=training_epochs, batch_size=training_batch_size)
 
 # save the model and the settings
-myTransformer.save('Models/TransportNumberRec_' + training_date + '/model')
+myTransformer.save('Models_3_layers/TransportNumberRec_' + training_date + '/model')
 WriteUsedSettingsToFileInJson()
 
 # make accuracy and loss in two graphs, boolean to show them

@@ -172,7 +172,7 @@ read_cropped_images('Input_left_190/Images_cropped')
 # ShowCroppedSerials(dataFrame['images'])
 
 # Load a saved model
-trained_model_h5 = keras.models.load_model('E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Models\TransportNumberRec_20210714_150709\model.h5')
+trained_model_h5 = keras.models.load_model('E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Models\TransportNumberRec_20210714_150709\model\saved_model.pb')
 # trained_model_pb = keras.models.load_model('E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Models\TransportNumberRec_20210714_150709\model\saved_model.pb')
 trained_model = trained_model_h5
 
