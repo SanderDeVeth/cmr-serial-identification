@@ -1,6 +1,4 @@
 # import np and tf and set seeds before anything else
-import imageio
-
 np_seed = 10
 tf_seed = 20
 import numpy as np
@@ -11,15 +9,13 @@ import tensorflow as tf
 tf.random.set_seed(tf_seed)
 
 import json
-import time
 import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
-import pandas as pd
 import os
 from time import perf_counter
-import cv2
-from keras.models import load_model
+import cv2.cv2 as cv2
 from sklearn.model_selection import train_test_split
+from skimage.color import rgb2lab, lab2rgb, rgb2gray
 from datetime import datetime
 
 
@@ -48,6 +44,8 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
     img = plt.imread(path)
     img = np.array(img[:, :, 0:3])
 
+    binarize_images_reader(img)
+
     if isPlot:
         plt.subplot(1, 2, 1)
         plt.imshow(img)
@@ -62,8 +60,10 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
     yMax = int(Bs.find('y').text) + int(Bs.find('height').text)
     yMin = int(Bs.find('y').text)
     # print(xMin, xMax, yMin, yMax, img.shape)
+
     # storing data
     dataFrame['image'].append(cv2.resize(img, (size_x, size_y)))
+
     # drawing box
     imgBoxed = cv2.rectangle(img, (xMin, yMin), (xMax, yMax), (0, 255, 0), 2)
     # storing data into frame
@@ -76,9 +76,9 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
             y += 1
         x += 1
 
-    # dataFrame['box'].append(cv2.resize(img, (size_x, size_y)))
-    mask = cv2.resize(img, (size_x, size_y))
-    dataFrame['box'].append(mask[:, :, 1])
+    dataFrame['box'].append(cv2.resize(img, (size_x, size_y)))
+    # mask = cv2.resize(img, (size_x, size_y))
+    # dataFrame['box'].append(mask[:, :, 0])
 
     if isPlot:
         plt.subplot(1, 2, 2)
@@ -104,6 +104,84 @@ def cropImages(y, x, h, w):
     for i in range(len(dataFrame['image'])):
         dataFrame['box'][i] = dataFrame['box'][i][y:y + h, x:x + w]
         dataFrame['image'][i] = dataFrame['image'][i][y:y + h, x:x + w]
+
+
+def binarize_images():
+    for i in range(len(dataFrame['image'])):
+        img = dataFrame['image'][i]
+        dataFrame['image'][i] = cv2.cvtColor(dataFrame['image'][i], cv2.COLOR_BGR2GRAY)
+
+        # rgb2lab, works
+        # dataFrame['image'][i] = rgb2lab(dataFrame['image'][i])
+        # dataFrame['image'][i][..., 1] = dataFrame['image'][i][..., 2] = 0
+        # dataFrame['image'][i] = lab2rgb(dataFrame['image'][i])
+
+        # rgb2gray, in dev
+        # dataFrame['image'][i] = rgb2gray(dataFrame['image'][i])
+        # dataFrame['image'][i][..., 1] = dataFrame['image'][i][..., 2] = 0
+        # dataFrame['image'][i] = lab2rgb(dataFrame['image'][i])
+
+        grey = dataFrame['image'][i]
+
+        # cv2.invert(dataFrame['image'][i])
+        # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 127, 255, cv2.THRESH_BINARY)
+        dataFrame['image'][i] = cv2.adaptiveThreshold(dataFrame['image'][i], 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 19, 25)
+        # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C)
+        binary = dataFrame['image'][i]
+
+        show_plots = False
+        if show_plots:
+            plt.subplot(1, 3, 1)
+            plt.title('Original')
+            plt.imshow(img)
+
+            plt.subplot(1, 3, 2)
+            plt.title('Greyscale')
+            plt.imshow(grey, cmap="gray")
+
+            plt.subplot(1, 3, 3)
+            plt.title('Binary')
+            plt.imshow(binary, cmap="gray")
+            plt.show()
+
+
+def binarize_images_reader(images):
+    for i in range(len(images)):
+        img = images[i]
+        images[i] = cv2.cvtColor(images[i], cv2.COLOR_BGR2GRAY)
+
+        # rgb2lab, works
+        # dataFrame['image'][i] = rgb2lab(dataFrame['image'][i])
+        # dataFrame['image'][i][..., 1] = dataFrame['image'][i][..., 2] = 0
+        # dataFrame['image'][i] = lab2rgb(dataFrame['image'][i])
+
+        # rgb2gray, in dev
+        # dataFrame['image'][i] = rgb2gray(dataFrame['image'][i])
+        # dataFrame['image'][i][..., 1] = dataFrame['image'][i][..., 2] = 0
+        # dataFrame['image'][i] = lab2rgb(dataFrame['image'][i])
+
+        grey = images[i]
+
+        # cv2.invert(dataFrame['image'][i])
+        # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 127, 255, cv2.THRESH_BINARY)
+        images[i] = cv2.adaptiveThreshold(images[i], 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 19, 25)
+        # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C)
+        binary = images[i]
+
+        show_plots = False
+        if show_plots:
+            plt.subplot(1, 3, 1)
+            plt.title('Original')
+            plt.imshow(img)
+
+            plt.subplot(1, 3, 2)
+            plt.title('Greyscale')
+            plt.imshow(grey, cmap="gray")
+
+            plt.subplot(1, 3, 3)
+            plt.title('Binary')
+            plt.imshow(binary, cmap="gray")
+            plt.show()
 
 
 # defining autoencoder model
@@ -200,7 +278,7 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
 
     plt.subplot(1, 4, 1)
     plt.title('Original image')
-    plt.imshow(img)
+    plt.imshow(img, cmap="gray")
 
     # ## sharpen image
     # filter = np.array([[-1, -1, -1], [-1, 8.99, -1], [-1, -1, -1]])
@@ -208,24 +286,24 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
 
     plt.subplot(1, 4, 2)
     plt.title('Annotation box')
-    plt.imshow(groundTruth)
+    plt.imshow(groundTruth, cmap="gray")
 
     plt.subplot(1, 4, 3)
     plt.title('Predicted serial')
-    plt.imshow(predMask)
+    plt.imshow(predMask, cmap="gray")
 
-    imh = predMask
-    imh[imh < 0.5] = 0
-    imh[imh > 0.5] = 1
-
-    plt.subplot(1, 4, 4)
-    plt.title('Segmented image')
-    plt.imshow(cv2.merge((imh, imh, imh)) * img)
-
-    plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction')
+    # imh = predMask
+    # imh[imh < 0.5] = 0
+    # imh[imh > 0.5] = 1
+    #
+    # plt.subplot(1, 4, 4)
+    # plt.title('Segmented image')
+    # plt.imshow(cv2.merge((imh, imh, imh)) * img, cmap="gray")
 
     if show_predictions:
         plt.show()
+
+    # plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction')
 
 
 # def plotter_array(img, predMask, groundTruth, show_predictions):
@@ -268,7 +346,7 @@ def ShowCroppedSerials(cropped_images):
 
         for j in range(fraction_img_count):
             plt.subplot(6, 4, j + 1)
-            plt.imshow(cropped_images[j + fraction_img_count * i])
+            plt.imshow(cropped_images[j + fraction_img_count * i], cmap="gray")
             plt.title('img:' + str(j + fraction_img_count * i))
             plt.axis('off')
 
@@ -276,14 +354,13 @@ def ShowCroppedSerials(cropped_images):
 
 
 def SaveCroppedSerials(cropped_images):
-    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped'
-    # dir2 = os.path.dirname(__file__)
-    # filename = os.path.join(dir, r'..\..\digit_recognition_model\Input_cropped')
+    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\binary'
     os.chdir(dir)
-    # os.listdir(dir2)
+
     for i in range(len(cropped_images)):
-        filename = 'cropped_cmr' + str(i+1) + '.jpeg'
-        result = cv2.imwrite(filename, cropped_images[i])
+        filename = 'cropped_cmr' + str(i+1) + '.png'
+        noise_image_norm = cv2.normalize(cropped_images[i], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        result = cv2.imwrite(filename, noise_image_norm)
         if result:
             print("File saved successfully")
         else:
@@ -347,17 +424,18 @@ box_h, box_w = 256, 416
 box_h, box_w = 256, 416
 
 cropImages(100, 840, box_h, box_w)
+# binarize_images()
 
 # ShowCroppedSerials(dataFrame['image'])
 # SaveCroppedSerials(dataFrame['image'])
 
 # displaying data loaded by our function
-show_annotation_plot = False
+show_annotation_plot = True
 if show_annotation_plot:
     plt.subplot(1, 2, 1)
-    plt.imshow(dataFrame['image'][1])
+    plt.imshow(dataFrame['image'][1], cmap="gray")
     plt.subplot(1, 2, 2)
-    plt.imshow(dataFrame['box'][1])
+    plt.imshow(dataFrame['box'][1], cmap="gray")
     plt.show()
 
 # settings used
@@ -373,7 +451,8 @@ training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
 x_train, x_test, y_train, y_test = train_test_split(np.array(dataFrame['image']), np.array(dataFrame['box']), test_size=training_test_size, random_state=training_random_state)
 
 # train model
-inputs = tf.keras.layers.Input((box_h, box_w, 3))
+inputs = tf.keras.layers.Input((box_h, box_w, 1))
+# inputs = tf.keras.layers.Input((box_h, box_w))
 myTransformer = GiveMeUnet(inputs, dropouts=training_dropouts)
 myTransformer.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
 retVal = myTransformer.fit(x_train, y_train, validation_data=(x_test, y_test), verbose=1, epochs=training_epochs, batch_size=training_batch_size)
