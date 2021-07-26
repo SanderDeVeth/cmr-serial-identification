@@ -18,7 +18,6 @@ from sklearn.model_selection import train_test_split
 from skimage.color import rgb2lab, lab2rgb, rgb2gray
 from datetime import datetime
 
-
 # gpus = tf.config.experimental.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(gpus[0], True)
 
@@ -39,18 +38,18 @@ from datetime import datetime
 # limitgpu(1024+512)
 
 
-def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=False):  # offset = 50, 882
+def Reader(path, annotPath, filename, size_x=1700, size_y=2338, isPlot=False, showTime=False):  # offset = 50, 882
     start = perf_counter()
     img = plt.imread(path)
     img = np.array(img[:, :, 0:3])
-
-    binarize_images_reader(img)
 
     if isPlot:
         plt.subplot(1, 2, 1)
         plt.imshow(img)
 
     # parsing html
+    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model'
+    os.chdir(dir)
     with open(annotPath, 'r') as f:
         data = f.read()
 
@@ -65,9 +64,10 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
     dataFrame['image'].append(cv2.resize(img, (size_x, size_y)))
 
     # drawing box
-    imgBoxed = cv2.rectangle(img, (xMin, yMin), (xMax, yMax), (0, 255, 0), 2)
-    # storing data into frame
+    # imgBoxed = cv2.rectangle(img, (xMin, yMin), (xMax, yMax), (0, 255, 0), 2)  # color
+    # imgBoxed = cv2.rectangle(img, (xMin, yMin), (xMax, yMax), 0, 2)  # greyscale/binary
 
+    # storing data into frame (displayed as purple box)
     x = yMin
     while x < yMax:
         y = xMin
@@ -83,6 +83,7 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
     if isPlot:
         plt.subplot(1, 2, 2)
         plt.imshow(cv2.resize(imgBoxed, (size_x, size_y)))
+        plt.show()
 
     if showTime:
         return perf_counter() - start
@@ -95,7 +96,7 @@ def Iterator(imageDir, annotDir):
     for mem in imageNames:
         path = imageDir + '/' + mem
         annotPath = annotDir + '/' + mem.split('.')[0] + '.xml'
-        Reader(path, annotPath)
+        Reader(path, annotPath, mem)
 
     return perf_counter() - start
 
@@ -106,7 +107,7 @@ def cropImages(y, x, h, w):
         dataFrame['image'][i] = dataFrame['image'][i][y:y + h, x:x + w]
 
 
-def binarize_images():
+def preprocess_images(show_plots=False):
     for i in range(len(dataFrame['image'])):
         img = dataFrame['image'][i]
         dataFrame['image'][i] = cv2.cvtColor(dataFrame['image'][i], cv2.COLOR_BGR2GRAY)
@@ -129,7 +130,6 @@ def binarize_images():
         # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C)
         binary = dataFrame['image'][i]
 
-        show_plots = False
         if show_plots:
             plt.subplot(1, 3, 1)
             plt.title('Original')
@@ -145,43 +145,79 @@ def binarize_images():
             plt.show()
 
 
-def binarize_images_reader(images):
-    for i in range(len(images)):
-        img = images[i]
-        images[i] = cv2.cvtColor(images[i], cv2.COLOR_BGR2GRAY)
+def preprocess_single_image(image, cmr_nr, show_plots=False, save_images=False):
+    print("Processing img " + cmr_nr)
 
-        # rgb2lab, works
-        # dataFrame['image'][i] = rgb2lab(dataFrame['image'][i])
-        # dataFrame['image'][i][..., 1] = dataFrame['image'][i][..., 2] = 0
-        # dataFrame['image'][i] = lab2rgb(dataFrame['image'][i])
+    img = image
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # rgb2gray, in dev
-        # dataFrame['image'][i] = rgb2gray(dataFrame['image'][i])
-        # dataFrame['image'][i][..., 1] = dataFrame['image'][i][..., 2] = 0
-        # dataFrame['image'][i] = lab2rgb(dataFrame['image'][i])
+    # cv2.invert(dataFrame['image'][i])
+    # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 127, 255, cv2.THRESH_BINARY)
+    binary_m = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 19, 25)
+    # binary_g = cv2.adaptiveThreshold(image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 25)
 
-        grey = images[i]
+    colorized_from_bin = img
 
-        # cv2.invert(dataFrame['image'][i])
-        # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 127, 255, cv2.THRESH_BINARY)
-        images[i] = cv2.adaptiveThreshold(images[i], 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 19, 25)
-        # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C)
-        binary = images[i]
+    rows, cols, third = img.shape
 
-        show_plots = False
-        if show_plots:
-            plt.subplot(1, 3, 1)
-            plt.title('Original')
-            plt.imshow(img)
+    for i in range(rows):
+        for j in range(cols):
+            # print(colorized_from_bin[i, j])
+            # print(binary_m[i, j])
+            colorized_from_bin.itemset((i, j, 0), binary_m[i, j])
+            colorized_from_bin.itemset((i, j, 1), binary_m[i, j])
+            colorized_from_bin.itemset((i, j, 2), binary_m[i, j])
+            # print(colorized_from_bin[i, j])
 
-            plt.subplot(1, 3, 2)
-            plt.title('Greyscale')
-            plt.imshow(grey, cmap="gray")
+    output_image = colorized_from_bin
 
-            plt.subplot(1, 3, 3)
-            plt.title('Binary')
-            plt.imshow(binary, cmap="gray")
-            plt.show()
+    if save_images:
+        dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\grayscale'
+        os.chdir(dir)
+        filename = cmr_nr + '.png'
+        result = cv2.imwrite(filename, gray)
+        if result:
+            print("Image saved successfully saved in grayscale")
+        else:
+            print("Error in saving grayscale image")
+
+        dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\binarized'
+        os.chdir(dir)
+        filename = cmr_nr + '.png'
+        result = cv2.imwrite(filename, binary_m)
+        if result:
+            print("Image saved successfully saved in binary colors")
+        else:
+            print("Error in saving binary image")
+
+        dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\recolorized'
+        os.chdir(dir)
+        filename = cmr_nr + '.png'
+        result = cv2.imwrite(filename, colorized_from_bin)
+        if result:
+            print("Image saved successfully saved in color")
+        else:
+            print("Error in saving color image")
+
+    if show_plots:
+        plt.subplot(1, 4, 1)
+        plt.title('Original')
+        plt.imshow(img)
+
+        plt.subplot(1, 4, 2)
+        plt.title('Greyscale')
+        plt.imshow(gray)
+
+        plt.subplot(1, 4, 3)
+        plt.title('Binary_MEAN')
+        plt.imshow(binary_m)
+
+        plt.subplot(1, 4, 4)
+        plt.title('Colorized')
+        plt.imshow(colorized_from_bin)
+        plt.show()
+
+    return output_image
 
 
 # defining autoencoder model
@@ -249,7 +285,7 @@ def GiveMeUnet(inputImage, numFilters=16, dropouts=0.1, doBatchNorm=True):
     u9 = tf.keras.layers.Dropout(dropouts)(u9)
     c9 = Conv2dBlock(u9, numFilters * 1, kernelSize=3, doBatchNorm=doBatchNorm)
 
-    output = tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid')(c9)
+    output = tf.keras.layers.Conv2D(3, (1, 1), activation='sigmoid')(c9)
     model = tf.keras.Model(inputs=[inputImage], outputs=[output])
     return model
 
@@ -278,7 +314,7 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
 
     plt.subplot(1, 4, 1)
     plt.title('Original image')
-    plt.imshow(img, cmap="gray")
+    plt.imshow(img)
 
     # ## sharpen image
     # filter = np.array([[-1, -1, -1], [-1, 8.99, -1], [-1, -1, -1]])
@@ -286,53 +322,47 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
 
     plt.subplot(1, 4, 2)
     plt.title('Annotation box')
-    plt.imshow(groundTruth, cmap="gray")
+    plt.imshow(groundTruth)
 
     plt.subplot(1, 4, 3)
     plt.title('Predicted serial')
     plt.imshow(predMask, cmap="gray")
 
-    # imh = predMask
-    # imh[imh < 0.5] = 0
-    # imh[imh > 0.5] = 1
-    #
-    # plt.subplot(1, 4, 4)
-    # plt.title('Segmented image')
-    # plt.imshow(cv2.merge((imh, imh, imh)) * img, cmap="gray")
+    imh = predMask
+    imh[imh < 0.5] = 0
+    imh[imh > 0.5] = 1
+
+    plt.subplot(1, 4, 4)
+    plt.title('Segmented image')
+    # plt.imshow(cv2.merge((imh[0], imh[[1]], imh[[2]])) * img, cmap="gray")
+    plt.imshow(imh, cmap="gray")
+
+    plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction.png')
 
     if show_predictions:
         plt.show()
 
-    # plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction')
 
+def plot_all_images(img, predMask, groundTruth, show_predictions=False):
+    plt.figure(figsize=(10, 5*len(img)))
 
-# def plotter_array(img, predMask, groundTruth, show_predictions):
-#     plt.figure(figsize=(10, 5*len(img)))
-#
-#     for i in img:
-#         plt
-#         plt.subplot(i+1, 3, 1)
-#         plt.imshow(img)
-#         plt.title('original Image')
-#
-#         ## Adding Image sharpening step here
-#         ## it is a sharpening filter
-#         filter = np.array([[-1, -1, -1], [-1, 8.99, -1], [-1, -1, -1]])
-#         # filter = np.array([[0.1, -1, 0.1], [-1, 5, -1], [0.1, -1, 0.1]])
-#         # filter = np.array([[-1, 0.1, -1], [0.1, 5, 0.1], [-1, 0.1, -1]])
-#         imgSharpen = cv2.filter2D(predMask, -1, filter)
-#
-#         plt.subplot(i+1, 3, 2)
-#         plt.imshow(imgSharpen)
-#         plt.title('Predicted Box position')
-#
-#         plt.subplot(i+1, 3, 3)
-#         plt.imshow(groundTruth)
-#         plt.title('actual box Position')
-#         plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction_array')
-#
-#     if show_predictions:
-#         plt.show()
+    for i in img:
+        plt.subplot(i+1, 3, 1)
+        plt.title('Original image')
+        plt.imshow(img)
+
+        plt.subplot(1, 3, 2)
+        plt.title('Annotation box')
+        plt.imshow(groundTruth)
+
+        plt.subplot(1, 3, 3)
+        plt.title('Predicted serial')
+        plt.imshow(predMask, cmap="gray")
+
+        plt.savefig('Models/TransportNumberRec_' + training_date + '/predictions/prediction_CMR'+i+'.png')
+
+    if show_predictions:
+        plt.show()
 
 
 def ShowCroppedSerials(cropped_images):
@@ -414,7 +444,8 @@ dataFrame = {
 }
 
 # CMR's with serial on the left half of the box (top right on the form)
-Iterator('Input_left_190/Images', 'Input_left_190/Annotations')
+Iterator('Input_left_190/Images/recolorized', 'Input_left_190/Annotations')
+# Iterator_single('Input_left_190/Images', 'Input_left_190/Annotations')
 
 # full serial box
 # box_w, box_h = 768, 256
@@ -433,9 +464,9 @@ cropImages(100, 840, box_h, box_w)
 show_annotation_plot = True
 if show_annotation_plot:
     plt.subplot(1, 2, 1)
-    plt.imshow(dataFrame['image'][1], cmap="gray")
+    plt.imshow(dataFrame['image'][0], cmap="gray")
     plt.subplot(1, 2, 2)
-    plt.imshow(dataFrame['box'][1], cmap="gray")
+    plt.imshow(dataFrame['box'][0], cmap="gray")
     plt.show()
 
 # settings used
@@ -451,7 +482,7 @@ training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
 x_train, x_test, y_train, y_test = train_test_split(np.array(dataFrame['image']), np.array(dataFrame['box']), test_size=training_test_size, random_state=training_random_state)
 
 # train model
-inputs = tf.keras.layers.Input((box_h, box_w, 1))
+inputs = tf.keras.layers.Input((box_h, box_w, 3))
 # inputs = tf.keras.layers.Input((box_h, box_w))
 myTransformer = GiveMeUnet(inputs, dropouts=training_dropouts)
 myTransformer.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
@@ -466,9 +497,8 @@ accuracy_loss_graphs(retVal, False)
 
 # predict  16 images from the dataFrame (first 16, ordered ?)
 sixteenPrediction, actuals, masks = predict16(dataFrame, myTransformer)
-# predict n serials, boolean to show
+# predict a serial, boolean to show
+
 Plotter(actuals[1], sixteenPrediction[1], masks[1], True)
-# Plotter(chan0[1], chan1[1], chan2[1], True)
 
-# plotter_array(actuals[1:4], sixteenPrediction[1:4], masks[1:4], True)
-
+# plot_all_images(actuals, sixteenPrediction, masks)
