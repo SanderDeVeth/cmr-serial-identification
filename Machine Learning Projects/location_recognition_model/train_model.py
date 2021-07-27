@@ -15,7 +15,6 @@ import os
 from time import perf_counter
 import cv2.cv2 as cv2
 from sklearn.model_selection import train_test_split
-from skimage.color import rgb2lab, lab2rgb, rgb2gray
 from datetime import datetime
 
 # gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -38,7 +37,7 @@ from datetime import datetime
 # limitgpu(1024+512)
 
 
-def Reader(path, annotPath, filename, size_x=1700, size_y=2338, isPlot=False, showTime=False):  # offset = 50, 882
+def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=False):  # offset = 50, 882
     start = perf_counter()
     img = plt.imread(path)
     img = np.array(img[:, :, 0:3])
@@ -96,7 +95,7 @@ def Iterator(imageDir, annotDir):
     for mem in imageNames:
         path = imageDir + '/' + mem
         annotPath = annotDir + '/' + mem.split('.')[0] + '.xml'
-        Reader(path, annotPath, mem)
+        Reader(path, annotPath)
 
     return perf_counter() - start
 
@@ -291,20 +290,20 @@ def GiveMeUnet(inputImage, numFilters=16, dropouts=0.1, doBatchNorm=True):
 
 
 ## function for getting 16 predictions
-def predict16(valMap, model, shape=256):
+def predict_n(valMap, model, size=16, shape=256):
     ## getting and proccessing val data
     img = valMap['image']
     mask = valMap['box']
-    mask = mask[0:16]
+    mask = mask[0:size]
 
-    imgProc = img[0:16]
+    imgProc = img[0:size]
     imgProc = np.array(img)
 
     predictions = model.predict(imgProc)
 
     # needs 3 layers (see "output =" in GiveMeUnet())
-    # for i in range(len(predictions)):
-    #     predictions[i] = cv2.merge((predictions[i, :, :, 0], predictions[i, :, :, 1], predictions[i, :, :, 2]))
+    for i in range(len(predictions)):
+        predictions[i] = cv2.merge((predictions[i, :, :, 0], predictions[i, :, :, 1], predictions[i, :, :, 2]))
 
     return predictions, imgProc, mask
 
@@ -312,7 +311,7 @@ def predict16(valMap, model, shape=256):
 def Plotter(img, predMask, groundTruth, show_predictions) -> object:
     plt.figure(figsize=(12, 3))
 
-    plt.subplot(1, 4, 1)
+    plt.subplot(1, 5, 1)
     plt.title('Original image')
     plt.imshow(img)
 
@@ -320,22 +319,53 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
     # filter = np.array([[-1, -1, -1], [-1, 8.99, -1], [-1, -1, -1]])
     # imgSharpen = cv2.filter2D(predMask, -1, filter)
 
-    plt.subplot(1, 4, 2)
+    plt.subplot(1, 5, 2)
     plt.title('Annotation box')
     plt.imshow(groundTruth)
 
-    plt.subplot(1, 4, 3)
+    plt.subplot(1, 5, 3)
     plt.title('Predicted serial')
     plt.imshow(predMask, cmap="gray")
 
-    imh = predMask
-    imh[imh < 0.5] = 0
-    imh[imh > 0.5] = 1
+    transparency = predMask
 
-    plt.subplot(1, 4, 4)
+    # b = transparency[:, :, 0]
+    # g = transparency[:, :, 1]
+    # r = transparency[:, :, 2]
+    b, g, r = cv2.split(transparency)
+
+    cv2.imshow("blue", b)
+    cv2.imshow("green", g)
+    cv2.imshow("red", r)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    # turn into B&W image
+    b[b > 0.5] = 1
+    b[b < 0.5] = 0
+    g[g > 0.5] = 0
+    g[g < 0.5] = 0
+    r[r > 0.5] = 1
+    r[r < 0.5] = 0
+    transparency = cv2.merge([b, g, r])
+    # imh[imh < 0.5] = 0
+    # imh[imh > 0.5] = 1
+
+    cv2.imshow("blue", b)
+    cv2.imshow("green", g)
+    cv2.imshow("red", r)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    plt.subplot(1, 5, 4)
+    plt.title('Transparency mask')
+    # put transparency layer over img
+    plt.imshow(transparency, cmap="gray")
+
+    plt.subplot(1, 5, 5 )
     plt.title('Segmented image')
-    # plt.imshow(cv2.merge((imh[0], imh[[1]], imh[[2]])) * img, cmap="gray")
-    plt.imshow(imh, cmap="gray")
+    # put transparency layer over img
+    plt.imshow(transparency * img, cmap="gray")
 
     plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction.png')
 
@@ -343,23 +373,50 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
         plt.show()
 
 
-def plot_all_images(img, predMask, groundTruth, show_predictions=False):
-    plt.figure(figsize=(10, 5*len(img)))
+def plot_16(img, predMask, groundTruth, show_predictions=False):
+    os.mkdir('Models/TransportNumberRec_' + training_date + '/16predictions')
 
-    for i in img:
-        plt.subplot(i+1, 3, 1)
+    for i in range(len(groundTruth)):
+        plt.figure(figsize=(10, 3))
+
+        plt.subplot(1, 5, 1)
         plt.title('Original image')
-        plt.imshow(img)
+        plt.imshow(img[i])
 
-        plt.subplot(1, 3, 2)
+        plt.subplot(1, 5, 2)
         plt.title('Annotation box')
-        plt.imshow(groundTruth)
+        plt.imshow(groundTruth[i])
 
-        plt.subplot(1, 3, 3)
+        plt.subplot(1, 5, 3)
         plt.title('Predicted serial')
-        plt.imshow(predMask, cmap="gray")
+        plt.imshow(predMask[i], cmap="gray")
 
-        plt.savefig('Models/TransportNumberRec_' + training_date + '/predictions/prediction_CMR'+i+'.png')
+        transparency = predMask[i]
+        b, g, r = cv2.split(transparency)
+
+        # turn into B&W image
+        b[b > 0.5] = 1
+        b[b < 0.5] = 1
+        g[g > 0.5] = 0  # green reversed
+        g[g < 0.5] = 1
+        r[r > 0.5] = 1
+        r[r < 0.5] = 1
+
+        transparency = cv2.merge([b, g, r])
+        # imh[imh < 0.5] = 0
+        # imh[imh > 0.5] = 1
+
+        plt.subplot(1, 5, 4)
+        plt.title('Transparency mask')
+        # put transparency layer over img
+        plt.imshow(transparency, cmap="gray")
+
+        plt.subplot(1, 5, 5)
+        plt.title('Segmented image')
+        # put transparency layer over img
+        plt.imshow(transparency * img[i], cmap="gray")
+
+        plt.savefig('Models/TransportNumberRec_' + training_date + '/16predictions/prediction_CMR'+str(i+1)+'.png')
 
     if show_predictions:
         plt.show()
@@ -395,6 +452,24 @@ def SaveCroppedSerials(cropped_images):
             print("File saved successfully")
         else:
             print("Error in saving file")
+
+
+# save predictions separately for the digit recognition model
+# TODO the annotations for the DRM are currently done with hand-cropped predictions, it should be possible to crop a prediction automatically to extract it
+def save_predictions(all_predictions):
+    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions'
+    os.chdir(dir)
+    print("Operation starting: saving predictions")
+
+    for i in range(len(all_predictions)):
+        filename = 'prediction_' + str(i+1) + '.png'
+        result = cv2.imwrite(filename, all_predictions[i])
+        if result:
+            print("File saved successfully")
+        else:
+            print("Error in saving file")
+
+    print("Operation complete: saving predictions")
 
 
 def WriteUsedSettingsToFileInJson():
@@ -455,13 +530,13 @@ box_h, box_w = 256, 416
 box_h, box_w = 256, 416
 
 cropImages(100, 840, box_h, box_w)
-# binarize_images()
+# preprocess_images()
 
 # ShowCroppedSerials(dataFrame['image'])
 # SaveCroppedSerials(dataFrame['image'])
 
 # displaying data loaded by our function
-show_annotation_plot = True
+show_annotation_plot = False
 if show_annotation_plot:
     plt.subplot(1, 2, 1)
     plt.imshow(dataFrame['image'][0], cmap="gray")
@@ -473,8 +548,8 @@ if show_annotation_plot:
 training_dropouts = 0
 training_test_size = 0.22
 training_random_state = 22
-training_epochs = 5
-training_batch_size = 8
+training_epochs = 25
+training_batch_size = 16
 
 training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -495,10 +570,12 @@ WriteUsedSettingsToFileInJson()
 # make accuracy and loss in two graphs, boolean to show them
 accuracy_loss_graphs(retVal, False)
 
-# predict  16 images from the dataFrame (first 16, ordered ?)
-sixteenPrediction, actuals, masks = predict16(dataFrame, myTransformer)
+# predict n images from the dataFrame
+predictions, actuals, masks = predict_n(dataFrame, myTransformer, range(len(dataFrame['box'])))
 # predict a serial, boolean to show
 
-Plotter(actuals[1], sixteenPrediction[1], masks[1], True)
+Plotter(actuals[1], predictions[1], masks[1], True)
 
-# plot_all_images(actuals, sixteenPrediction, masks)
+# plot_16(actuals, predictions, masks)  # also saves images
+
+save_predictions(predictions)
