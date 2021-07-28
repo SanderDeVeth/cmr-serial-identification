@@ -16,6 +16,7 @@ from time import perf_counter
 import cv2.cv2 as cv2
 from sklearn.model_selection import train_test_split
 from datetime import datetime
+from PIL import Image, ImageFilter
 
 # gpus = tf.config.experimental.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(gpus[0], True)
@@ -219,6 +220,44 @@ def preprocess_single_image(image, cmr_nr, show_plots=False, save_images=False):
     return output_image
 
 
+# def segment_prediction(image, cmr_nr, show_plots=False, save_images=False):
+#     print("Processing prediction of CMR " + cmr_nr)
+#
+#     img = image
+#
+#     rows, cols, third = img.shape
+#
+#     for i in range(rows):
+#         for j in range(cols):
+#             b = image[i, j, 0]
+#             g = image[i, j, 1]
+#             r = image[i, j, 2]
+#
+#
+#     output_image = cv2.merge([b, g, r])
+#
+#     if save_images:
+#         dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\output'
+#         os.chdir(dir)
+#         filename = cmr_nr + '.png'
+#         result = cv2.imwrite(filename, output_image)
+#         if result:
+#             print("Image saved successfully")
+#         else:
+#             print("Error in saving image")
+#
+#     if show_plots:
+#         plt.subplot(1, 2, 1)
+#         plt.title('Original')
+#         plt.imshow(img)
+#
+#         plt.subplot(1, 2, 2)
+#         plt.title('Segmented')
+#         plt.imshow(output_image)
+#
+#     return output_image
+
+
 # defining autoencoder model
 def Conv2dBlock(inputTensor, numFilters, kernelSize=3, doBatchNorm=True):
     # first Conv
@@ -289,9 +328,78 @@ def GiveMeUnet(inputImage, numFilters=16, dropouts=0.1, doBatchNorm=True):
     return model
 
 
-## function for getting 16 predictions
+def show_original_and_annotation():
+    plt.subplot(1, 2, 1)
+    plt.imshow(dataFrame['image'][0])
+    plt.subplot(1, 2, 2)
+    plt.imshow(dataFrame['box'][0])
+    plt.show()
+
+
+def show_hsv():
+    predMask = dataFrame['box'][0]
+    img = dataFrame['image'][0]
+
+    img_n = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+    pred_n = cv2.normalize(predMask, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+
+    hsv = cv2.cvtColor(pred_n, cv2.COLOR_BGR2HSV)
+    lower_boundary = np.array([55, 190, 255])
+    upper_boundary = np.array([65, 255, 255])
+    hsv_mask = cv2.inRange(hsv, lower_boundary, upper_boundary)
+    new_img = cv2.bitwise_and(pred_n, pred_n, mask=hsv_mask)
+
+    cv2.imshow("img", img_n)
+    cv2.imshow("box", predMask)
+    cv2.imshow("hsv", hsv)
+    cv2.imshow("new image", new_img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+# save predictions separately for the digit recognition model
+# TODO the annotations for the DRM are currently done with hand-cropped predictions, it should be possible to crop a prediction automatically to extract it
+def save_predictions(predictions):
+    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions\filtered'
+    os.chdir(dir)
+    print("Operation starting: saving predictions")
+
+    for i in range(len(predictions)):
+        pred_n = cv2.normalize(predictions[i], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+
+        hsv = cv2.cvtColor(pred_n, cv2.COLOR_BGR2HSV)
+        lower_boundary = np.array([55, 190, 255])
+        upper_boundary = np.array([65, 255, 255])
+        hsv_mask = cv2.inRange(hsv, lower_boundary, upper_boundary)
+        serial = cv2.bitwise_and(pred_n, pred_n, mask=hsv_mask)
+
+        # im = serial
+        # na = np.array(im)
+        # orig = na.copy()  # Save original
+        # # im = im.filter(ImageFilter.MedianFilter(3))
+        #
+        # greenY, greenX = np.where(np.all(na == [0, 255, 0], axis=2))
+        #
+        # top, bottom = greenY[0], greenY[-1]
+        # left, right = greenX[0], greenX[-1]
+        # padding = 5
+        # ROI = orig[top+padding:bottom-padding, left-padding:right+padding]
+        # serial_cropped = Image.fromarray(ROI)
+
+        filename = 'segmented_serial' + str(i + 1) + '.png'
+        result = cv2.imwrite(filename, serial)
+        if result:
+            print("File saved successfully")
+        else:
+            print("Error in saving file")
+
+    print("Operation ended: saving predictions")
+
+
+
+# function for getting 16 predictions
 def predict_n(valMap, model, size=16, shape=256):
-    ## getting and proccessing val data
+    # getting and proccessing val data
     img = valMap['image']
     mask = valMap['box']
     mask = mask[0:size]
@@ -308,7 +416,7 @@ def predict_n(valMap, model, size=16, shape=256):
     return predictions, imgProc, mask
 
 
-def Plotter(img, predMask, groundTruth, show_predictions) -> object:
+def Plotter(img, predMask, groundTruth, show_predictions=False) -> object:
     plt.figure(figsize=(12, 3))
 
     plt.subplot(1, 5, 1)
@@ -325,47 +433,47 @@ def Plotter(img, predMask, groundTruth, show_predictions) -> object:
 
     plt.subplot(1, 5, 3)
     plt.title('Predicted serial')
-    plt.imshow(predMask, cmap="gray")
+    plt.imshow(predMask)
 
     transparency = predMask
 
     # b = transparency[:, :, 0]
     # g = transparency[:, :, 1]
     # r = transparency[:, :, 2]
-    b, g, r = cv2.split(transparency)
+    # b, g, r = cv2.split(transparency)
 
-    cv2.imshow("blue", b)
-    cv2.imshow("green", g)
-    cv2.imshow("red", r)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow("blue", b)
+    # cv2.imshow("green", g)
+    # cv2.imshow("red", r)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     # turn into B&W image
-    b[b > 0.5] = 1
-    b[b < 0.5] = 0
-    g[g > 0.5] = 0
-    g[g < 0.5] = 0
-    r[r > 0.5] = 1
-    r[r < 0.5] = 0
-    transparency = cv2.merge([b, g, r])
+    # b[b > 0.5] = 0
+    # b[b < 0.5] = 1
+    # g[g > 0.5] = 0
+    # g[g < 0.5] = 0
+    # r[r > 0.5] = 0
+    # r[r < 0.5] = 1
+    # transparency = cv2.merge([b, g, r])
     # imh[imh < 0.5] = 0
     # imh[imh > 0.5] = 1
 
-    cv2.imshow("blue", b)
-    cv2.imshow("green", g)
-    cv2.imshow("red", r)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow("blue", b)
+    # cv2.imshow("green", g)
+    # cv2.imshow("red", r)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     plt.subplot(1, 5, 4)
-    plt.title('Transparency mask')
+    plt.title('Transparency mask = Predicted Serial')
     # put transparency layer over img
-    plt.imshow(transparency, cmap="gray")
+    plt.imshow(transparency)
 
     plt.subplot(1, 5, 5 )
     plt.title('Segmented image')
     # put transparency layer over img
-    plt.imshow(transparency * img, cmap="gray")
+    plt.imshow(transparency * predMask)
 
     plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction.png')
 
@@ -454,24 +562,6 @@ def SaveCroppedSerials(cropped_images):
             print("Error in saving file")
 
 
-# save predictions separately for the digit recognition model
-# TODO the annotations for the DRM are currently done with hand-cropped predictions, it should be possible to crop a prediction automatically to extract it
-def save_predictions(all_predictions):
-    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions'
-    os.chdir(dir)
-    print("Operation starting: saving predictions")
-
-    for i in range(len(all_predictions)):
-        filename = 'prediction_' + str(i+1) + '.png'
-        result = cv2.imwrite(filename, all_predictions[i])
-        if result:
-            print("File saved successfully")
-        else:
-            print("Error in saving file")
-
-    print("Operation complete: saving predictions")
-
-
 def WriteUsedSettingsToFileInJson():
     dict = {
         "image_height": 2338,
@@ -536,19 +626,14 @@ cropImages(100, 840, box_h, box_w)
 # SaveCroppedSerials(dataFrame['image'])
 
 # displaying data loaded by our function
-show_annotation_plot = False
-if show_annotation_plot:
-    plt.subplot(1, 2, 1)
-    plt.imshow(dataFrame['image'][0], cmap="gray")
-    plt.subplot(1, 2, 2)
-    plt.imshow(dataFrame['box'][0], cmap="gray")
-    plt.show()
+# show_original_and_annotation()
+# show_hsv()
 
 # settings used
 training_dropouts = 0
 training_test_size = 0.22
 training_random_state = 22
-training_epochs = 25
+training_epochs = 1
 training_batch_size = 16
 
 training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -567,14 +652,20 @@ retVal = myTransformer.fit(x_train, y_train, validation_data=(x_test, y_test), v
 myTransformer.save('Models/TransportNumberRec_' + training_date + '/model')
 WriteUsedSettingsToFileInJson()
 
+reconstructed_model = tf.keras.models.load_model('Models/TransportNumberRec_' + training_date + '/model')
+
+np.testing.assert_allclose(
+    myTransformer.predict(x_train), reconstructed_model.predict(x_train)
+)
+
 # make accuracy and loss in two graphs, boolean to show them
 accuracy_loss_graphs(retVal, False)
 
 # predict n images from the dataFrame
-predictions, actuals, masks = predict_n(dataFrame, myTransformer, range(len(dataFrame['box'])))
+predictions, actuals, masks = predict_n(dataFrame, myTransformer, len(dataFrame['box']))
 # predict a serial, boolean to show
 
-Plotter(actuals[1], predictions[1], masks[1], True)
+Plotter(actuals[1], predictions[1], masks[1])
 
 # plot_16(actuals, predictions, masks)  # also saves images
 
