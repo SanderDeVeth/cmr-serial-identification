@@ -633,7 +633,7 @@ cropImages(100, 840, box_h, box_w)
 training_dropouts = 0
 training_test_size = 0.22
 training_random_state = 22
-training_epochs = 1
+training_epochs = 50
 training_batch_size = 16
 
 training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
