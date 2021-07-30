@@ -2,7 +2,7 @@
 import keras
 import numpy as np
 import tensorflow as tf
-
+import sys
 import json
 import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
@@ -58,73 +58,97 @@ def preprocess_images():
 # save predictions separately for the digit recognition model
 # TODO the annotations for the DRM are currently done with hand-cropped predictions, it should be possible to crop a prediction automatically to extract it
 def save_predictions(predictions):
-    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions'
+    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions\filtered'
     os.chdir(dir)
     print("Operation starting: saving predictions")
+    print("amount of predictions: " + str(range(len(predictions))))
+    counter = 0
+    errors = []
+    bad = [41, 59, 70, 76, 88, 98, 108, 184]
 
     for i in range(len(predictions)):
         pred_n = cv2.normalize(predictions[i], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 
         hsv = cv2.cvtColor(pred_n, cv2.COLOR_BGR2HSV)
-        lower_boundary = np.array([50, 100, 200])
-        upper_boundary = np.array([70, 255, 255])
+        lower_boundary = np.array([55, 200, 210])
+        upper_boundary = np.array([65, 255, 255])
         hsv_mask = cv2.inRange(hsv, lower_boundary, upper_boundary)
-        serial = cv2.bitwise_and(pred_n, pred_n, mask=hsv_mask)
 
-        cv2.imshow("prediction", predictions[i])
-        cv2.imshow("normalized", pred_n)
-        cv2.imshow("hsv", hsv)
-        cv2.imshow("serial", serial)
+        dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions\hsv'
+        os.chdir(dir)
+        filename = 'hsv_' + str(i + 1) + '.png'
+        cv2.imwrite(filename, hsv)
 
-        serial[:, :, 0] = 0
-        serial[:, :, 2] = 0
+        # serial = cv2.bitwise_and(pred_n, pred_n, mask=hsv_mask)
 
-        cv2.imshow("serial normalized", serial)
+        cleaned = hsv_mask
 
-        im = serial
-        na = np.array(im)
-        orig = na.copy()  # Save original
-        # im = im.filter(ImageFilter.MedianFilter(3))
+        # cv2.imshow("prediction", predictions[i])
+        # cv2.imshow("hsv", hsv)
+        # cv2.imshow("hsv mask", hsv_mask)
 
-        cv2.imshow("im", im)
-        cv2.imshow("na", na)
-        cv2.imshow("orig", orig)
-        cv2.imshow("na", na)
+        im = cleaned
+        med_5 = cv2.medianBlur(im, 5)
+        med_3 = cv2.medianBlur(im, 3)
+        med_5_3 = cv2.medianBlur(med_5, 3)
+
+        # cv2.imshow("cleaned", cleaned)
+        # cv2.imshow("med 3", med_3)
+        # cv2.imshow("med 5", med_5)
+        # cv2.imshow("med 5 3", med_5_3)
+
+        coords = np.argwhere(im)
+        whiteY, whiteX = zip(*coords)
+        whiteY = np.sort(whiteY)
+        whiteX = np.sort(whiteX)
+        top, bottom = whiteY[0], whiteY[-1]
+        left, right = whiteX[0], whiteX[-1]
+        # print('top left:', str(left), str(top), 'bottom right:', str(right), str(bottom))
+        padding = 8
+        serial_cropped = im[top-padding:bottom+padding, left-padding:right+padding]
+        # cv2.imshow("cropped serial", serial_cropped)
+        serial_cropped_inv = cv2.bitwise_not(serial_cropped)
+        # cv2.imshow("cropped serial inverted", serial_cropped_inv)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-        greenY, greenX = np.where(np.all(na == [0, 255, 0], axis=2))
-
-        top, bottom = greenY[0], greenY[-1]
-        left, right = greenX[0], greenX[-1]
-        padding = 0
-        ROI = orig[top+padding:bottom-padding, left-padding:right+padding]
-        serial_cropped = Image.fromarray(ROI)
-
         filename = 'filtered_serial' + str(i + 1) + '.png'
-        # result = cv2.imwrite(filename, serial_cropped)
-        result = serial_cropped.save(filename)
-        if result:
-            print("File saved successfully")
-        else:
-            print("Error in saving file")
+        try:
+            dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions\cropped'
+            os.chdir(dir)
+            result = cv2.imwrite(filename, serial_cropped_inv)
+            if result:
+                print("File saved successfully: " + filename)
+                counter += 1
+            else:
+                print("Error in saving file")
+        except:
+            errors.append("image " + str(i+1))
+            errors.append(sys.exc_info())
+            print("Oops!", sys.exc_info()[0], "occurred.")
+            print("Next entry.")
+            print()
 
     print("Operation ended: saving predictions")
+    print("Operation ended: saved " + str(counter) + " images")
+
+    print("Operation ended: The encountered errors were:")
+    for i in errors:
+        for j in i:
+            print(j, end=" ")
+        print()
 
 
 # function for getting 16 predictions
 def predict_n(valMap, model, size=16, shape=256):
     # getting and proccessing val data
     img = valMap['image']
-    # mask = valMap['box']
-    # mask = mask[0:size]
 
     imgProc = img[0:size]
     imgProc = np.array(img)
 
     predictions = model.predict(imgProc)
 
-    # needs 3 layers (see "output =" in GiveMeUnet())
     for i in range(len(predictions)):
         predictions[i] = cv2.merge((predictions[i, :, :, 0], predictions[i, :, :, 1], predictions[i, :, :, 2]))
 
@@ -133,8 +157,7 @@ def predict_n(valMap, model, size=16, shape=256):
 
 
 dataFrame = {
-    'image': [],
-    'box': []
+    'image': []
 }
 
 # load images
@@ -150,18 +173,14 @@ cropImages(100, 840, box_h, box_w)
 # preprocess_images()
 
 # load model
-folder = 'TransportNumberRec_20210728_134841'
+# folder = 'TransportNumberRec_20210728_134841'  # 25 epoch
+# folder = 'TransportNumberRec_20210728_225022'  # 50 epochs
+folder = 'TransportNumberRec_20210729_001501'  # 50 epochs
 location = 'Models/' + folder + '/model'
 
 print('loading model at: ' + location)
 reconstructed_model = tf.keras.models.load_model(location)
-
 print('loading succesful')
-
-print('model summary')
-reconstructed_model.summary()
-reconstructed_model.get_weights()
-reconstructed_model.optimizer
 
 # predict random image
 predictions, actuals = predict_n(dataFrame, reconstructed_model, len(dataFrame['image']))

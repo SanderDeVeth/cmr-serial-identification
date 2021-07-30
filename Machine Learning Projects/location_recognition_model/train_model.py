@@ -349,9 +349,12 @@ def show_hsv():
     hsv_mask = cv2.inRange(hsv, lower_boundary, upper_boundary)
     new_img = cv2.bitwise_and(pred_n, pred_n, mask=hsv_mask)
 
-    cv2.imshow("img", img_n)
+    cv2.imshow("img", img)
+    cv2.imshow("img n", img_n)
     cv2.imshow("box", predMask)
+    cv2.imshow("box n", pred_n)
     cv2.imshow("hsv", hsv)
+    cv2.imshow("hsv mask", hsv_mask)
     cv2.imshow("new image", new_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -360,7 +363,7 @@ def show_hsv():
 # save predictions separately for the digit recognition model
 # TODO the annotations for the DRM are currently done with hand-cropped predictions, it should be possible to crop a prediction automatically to extract it
 def save_predictions(predictions):
-    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions\filtered'
+    dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions\cropped'
     os.chdir(dir)
     print("Operation starting: saving predictions")
 
@@ -371,23 +374,19 @@ def save_predictions(predictions):
         lower_boundary = np.array([55, 190, 255])
         upper_boundary = np.array([65, 255, 255])
         hsv_mask = cv2.inRange(hsv, lower_boundary, upper_boundary)
-        serial = cv2.bitwise_and(pred_n, pred_n, mask=hsv_mask)
 
-        # im = serial
-        # na = np.array(im)
-        # orig = na.copy()  # Save original
-        # # im = im.filter(ImageFilter.MedianFilter(3))
-        #
-        # greenY, greenX = np.where(np.all(na == [0, 255, 0], axis=2))
-        #
-        # top, bottom = greenY[0], greenY[-1]
-        # left, right = greenX[0], greenX[-1]
-        # padding = 5
-        # ROI = orig[top+padding:bottom-padding, left-padding:right+padding]
-        # serial_cropped = Image.fromarray(ROI)
+        coords = np.argwhere(hsv_mask)
+        whiteY, whiteX = zip(*coords)
+        whiteY = np.sort(whiteY)
+        whiteX = np.sort(whiteX)
+        top, bottom = whiteY[0], whiteY[-1]
+        left, right = whiteX[0], whiteX[-1]
+        padding = 8
+        serial_cropped = hsv_mask[top - padding:bottom + padding, left - padding:right + padding]
+        serial_cropped_inv = cv2.bitwise_not(serial_cropped)
 
-        filename = 'segmented_serial' + str(i + 1) + '.png'
-        result = cv2.imwrite(filename, serial)
+        filename = 'pred_serial' + str(i + 1) + '.png'
+        result = cv2.imwrite(filename, serial_cropped_inv)
         if result:
             print("File saved successfully")
         else:
@@ -396,8 +395,6 @@ def save_predictions(predictions):
     print("Operation ended: saving predictions")
 
 
-
-# function for getting 16 predictions
 def predict_n(valMap, model, size=16, shape=256):
     # getting and proccessing val data
     img = valMap['image']
@@ -417,9 +414,9 @@ def predict_n(valMap, model, size=16, shape=256):
 
 
 def Plotter(img, predMask, groundTruth, show_predictions=False) -> object:
-    plt.figure(figsize=(12, 3))
+    plt.figure(figsize=(8, 4))
 
-    plt.subplot(1, 5, 1)
+    plt.subplot(2, 3, 1)
     plt.title('Original image')
     plt.imshow(img)
 
@@ -427,104 +424,43 @@ def Plotter(img, predMask, groundTruth, show_predictions=False) -> object:
     # filter = np.array([[-1, -1, -1], [-1, 8.99, -1], [-1, -1, -1]])
     # imgSharpen = cv2.filter2D(predMask, -1, filter)
 
-    plt.subplot(1, 5, 2)
+    plt.subplot(2, 3, 2)
     plt.title('Annotation box')
     plt.imshow(groundTruth)
 
-    plt.subplot(1, 5, 3)
+    plt.subplot(2, 3, 3)
     plt.title('Predicted serial')
     plt.imshow(predMask)
 
-    transparency = predMask
+    pred_n = cv2.normalize(predMask, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+    hsv = cv2.cvtColor(pred_n, cv2.COLOR_BGR2HSV)
+    lower_boundary = np.array([55, 200, 210])
+    upper_boundary = np.array([65, 255, 255])
+    hsv_mask = cv2.inRange(hsv, lower_boundary, upper_boundary)
 
-    # b = transparency[:, :, 0]
-    # g = transparency[:, :, 1]
-    # r = transparency[:, :, 2]
-    # b, g, r = cv2.split(transparency)
+    coords = np.argwhere(hsv_mask)
+    whiteY, whiteX = zip(*coords)
+    whiteY = np.sort(whiteY)
+    whiteX = np.sort(whiteX)
+    top, bottom = whiteY[0], whiteY[-1]
+    left, right = whiteX[0], whiteX[-1]
+    padding = 8
+    serial_cropped = hsv_mask[top - padding:bottom + padding, left - padding:right + padding]
+    serial_cropped_inv = cv2.bitwise_not(serial_cropped)
 
-    # cv2.imshow("blue", b)
-    # cv2.imshow("green", g)
-    # cv2.imshow("red", r)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    plt.subplot(2, 3, 4)
+    plt.title('HSV of Predmask')
+    plt.imshow(hsv)
 
-    # turn into B&W image
-    # b[b > 0.5] = 0
-    # b[b < 0.5] = 1
-    # g[g > 0.5] = 0
-    # g[g < 0.5] = 0
-    # r[r > 0.5] = 0
-    # r[r < 0.5] = 1
-    # transparency = cv2.merge([b, g, r])
-    # imh[imh < 0.5] = 0
-    # imh[imh > 0.5] = 1
+    plt.subplot(2, 3, 5)
+    plt.title('HSV range mask of prediction')
+    plt.imshow(hsv_mask)
 
-    # cv2.imshow("blue", b)
-    # cv2.imshow("green", g)
-    # cv2.imshow("red", r)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-
-    plt.subplot(1, 5, 4)
-    plt.title('Transparency mask = Predicted Serial')
-    # put transparency layer over img
-    plt.imshow(transparency)
-
-    plt.subplot(1, 5, 5 )
-    plt.title('Segmented image')
-    # put transparency layer over img
-    plt.imshow(transparency * predMask)
+    plt.subplot(2, 3, 6)
+    plt.title('final image (inverted)')
+    plt.imshow(serial_cropped_inv)
 
     plt.savefig('Models/TransportNumberRec_' + training_date + '/prediction.png')
-
-    if show_predictions:
-        plt.show()
-
-
-def plot_16(img, predMask, groundTruth, show_predictions=False):
-    os.mkdir('Models/TransportNumberRec_' + training_date + '/16predictions')
-
-    for i in range(len(groundTruth)):
-        plt.figure(figsize=(10, 3))
-
-        plt.subplot(1, 5, 1)
-        plt.title('Original image')
-        plt.imshow(img[i])
-
-        plt.subplot(1, 5, 2)
-        plt.title('Annotation box')
-        plt.imshow(groundTruth[i])
-
-        plt.subplot(1, 5, 3)
-        plt.title('Predicted serial')
-        plt.imshow(predMask[i], cmap="gray")
-
-        transparency = predMask[i]
-        b, g, r = cv2.split(transparency)
-
-        # turn into B&W image
-        b[b > 0.5] = 1
-        b[b < 0.5] = 1
-        g[g > 0.5] = 0  # green reversed
-        g[g < 0.5] = 1
-        r[r > 0.5] = 1
-        r[r < 0.5] = 1
-
-        transparency = cv2.merge([b, g, r])
-        # imh[imh < 0.5] = 0
-        # imh[imh > 0.5] = 1
-
-        plt.subplot(1, 5, 4)
-        plt.title('Transparency mask')
-        # put transparency layer over img
-        plt.imshow(transparency, cmap="gray")
-
-        plt.subplot(1, 5, 5)
-        plt.title('Segmented image')
-        # put transparency layer over img
-        plt.imshow(transparency * img[i], cmap="gray")
-
-        plt.savefig('Models/TransportNumberRec_' + training_date + '/16predictions/prediction_CMR'+str(i+1)+'.png')
 
     if show_predictions:
         plt.show()
@@ -610,7 +546,7 @@ dataFrame = {
 
 # CMR's with serial on the left half of the box (top right on the form)
 Iterator('Input_left_190/Images/recolorized', 'Input_left_190/Annotations')
-# Iterator_single('Input_left_190/Images', 'Input_left_190/Annotations')
+# Iterator_single('Input_left_190/Images', 'Input_left_190/Annotations')  # requires preprocess_images()
 
 # full serial box
 # box_w, box_h = 768, 256
@@ -637,6 +573,7 @@ training_epochs = 50
 training_batch_size = 16
 
 training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
+# training_date = '20210728_134841'
 
 # split data in train and test data
 x_train, x_test, y_train, y_test = train_test_split(np.array(dataFrame['image']), np.array(dataFrame['box']), test_size=training_test_size, random_state=training_random_state)
@@ -646,27 +583,38 @@ inputs = tf.keras.layers.Input((box_h, box_w, 3))
 # inputs = tf.keras.layers.Input((box_h, box_w))
 myTransformer = GiveMeUnet(inputs, dropouts=training_dropouts)
 myTransformer.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
+tf.keras.callbacks.EarlyStopping(
+    monitor='val_loss', min_delta=0, patience=3, verbose=0,
+    mode='auto', baseline=None, restore_best_weights=False
+)
 retVal = myTransformer.fit(x_train, y_train, validation_data=(x_test, y_test), verbose=1, epochs=training_epochs, batch_size=training_batch_size)
 
-# save the model and the settings
+#load model
+# folder = 'TransportNumberRec_20210728_134841'
+# location = 'Models/' + folder + '/model'
+
+# print('loading model at: ' + location)
+# reconstructed_model = tf.keras.models.load_model(location)
+# myTransformer = reconstructed_model
+
+
+# # save the model and the settings
 myTransformer.save('Models/TransportNumberRec_' + training_date + '/model')
 WriteUsedSettingsToFileInJson()
 
-reconstructed_model = tf.keras.models.load_model('Models/TransportNumberRec_' + training_date + '/model')
-
-np.testing.assert_allclose(
-    myTransformer.predict(x_train), reconstructed_model.predict(x_train)
-)
+# reconstructed_model = tf.keras.models.load_model('Models/TransportNumberRec_' + training_date + '/model')
+#
+# np.testing.assert_allclose(
+#     myTransformer.predict(x_train), reconstructed_model.predict(x_train)
+# )
 
 # make accuracy and loss in two graphs, boolean to show them
 accuracy_loss_graphs(retVal, False)
 
 # predict n images from the dataFrame
-predictions, actuals, masks = predict_n(dataFrame, myTransformer, len(dataFrame['box']))
+predictions, actuals, masks = predict_n(dataFrame, myTransformer)
 # predict a serial, boolean to show
 
-Plotter(actuals[1], predictions[1], masks[1])
+Plotter(actuals[7], predictions[7], masks[7])
 
-# plot_16(actuals, predictions, masks)  # also saves images
-
-save_predictions(predictions)
+# save_predictions(predictions)
