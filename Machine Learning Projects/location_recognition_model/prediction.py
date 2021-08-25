@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
 import os
 from time import perf_counter
-import cv2.cv2 as cv2
+# import cv2.cv2 as cv2
+import cv2
 from sklearn.model_selection import train_test_split
 from datetime import datetime
 from PIL import Image, ImageFilter

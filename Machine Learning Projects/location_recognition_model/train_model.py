@@ -1,4 +1,6 @@
 # import np and tf and set seeds before anything else
+import warnings
+
 np_seed = 10
 tf_seed = 20
 import numpy as np
@@ -13,10 +15,13 @@ import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
 import os
 from time import perf_counter
-import cv2.cv2 as cv2
+# import cv2.cv2 as cv2
+import cv2
 from sklearn.model_selection import train_test_split
 from datetime import datetime
 from PIL import Image, ImageFilter
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 # gpus = tf.config.experimental.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(gpus[0], True)
@@ -42,6 +47,12 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
     start = perf_counter()
     img = plt.imread(path)
     img = np.array(img[:, :, 0:3])
+
+    path_arr = path.split('/')
+    path_arr = path_arr[-1].split('.')
+    cmr_nr = path_arr[-2]
+
+    preprocess_single_image(img, cmr_nr, False, True)
 
     if isPlot:
         plt.subplot(1, 2, 1)
@@ -80,10 +91,10 @@ def Reader(path, annotPath, size_x=1700, size_y=2338, isPlot=False, showTime=Fal
     # mask = cv2.resize(img, (size_x, size_y))
     # dataFrame['box'].append(mask[:, :, 0])
 
-    if isPlot:
-        plt.subplot(1, 2, 2)
-        plt.imshow(cv2.resize(imgBoxed, (size_x, size_y)))
-        plt.show()
+    # if isPlot:
+    #     plt.subplot(1, 2, 2)
+    #     plt.imshow(cv2.resize(imgBoxed, (size_x, size_y)))
+    #     plt.show()
 
     if showTime:
         return perf_counter() - start
@@ -107,7 +118,11 @@ def cropImages(y, x, h, w):
         dataFrame['image'][i] = dataFrame['image'][i][y:y + h, x:x + w]
 
 
+# deprecated, moved to preprocess_single_images due to memory usage.
+# also outdated, do not use
 def preprocess_images(show_plots=False):
+    warnings.warn("preprocess_images is deprecated, use preprocess_single_image instead", DeprecationWarning)
+
     for i in range(len(dataFrame['image'])):
         img = dataFrame['image'][i]
         dataFrame['image'][i] = cv2.cvtColor(dataFrame['image'][i], cv2.COLOR_BGR2GRAY)
@@ -151,8 +166,9 @@ def preprocess_single_image(image, cmr_nr, show_plots=False, save_images=False):
     img = image
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # cv2.invert(dataFrame['image'][i])
-    # _, dataFrame['image'][i] = cv2.threshold(dataFrame['image'][i], 127, 255, cv2.THRESH_BINARY)
+    # _, binary_threshold63 = cv2.threshold(gray, 63, 255, cv2.THRESH_BINARY)
+    # _, binary_threshold127 = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+    # _, binary_threshold191 = cv2.threshold(gray, 191, 255, cv2.THRESH_BINARY)
     binary_m = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 19, 25)
     # binary_g = cv2.adaptiveThreshold(image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 25)
 
@@ -162,29 +178,53 @@ def preprocess_single_image(image, cmr_nr, show_plots=False, save_images=False):
 
     for i in range(rows):
         for j in range(cols):
-            # print(colorized_from_bin[i, j])
-            # print(binary_m[i, j])
             colorized_from_bin.itemset((i, j, 0), binary_m[i, j])
             colorized_from_bin.itemset((i, j, 1), binary_m[i, j])
             colorized_from_bin.itemset((i, j, 2), binary_m[i, j])
-            # print(colorized_from_bin[i, j])
 
     output_image = colorized_from_bin
 
     if save_images:
+        filename = cmr_nr + '.png'
+
         dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\grayscale'
         os.chdir(dir)
-        filename = cmr_nr + '.png'
         result = cv2.imwrite(filename, gray)
         if result:
             print("Image saved successfully saved in grayscale")
         else:
             print("Error in saving grayscale image")
 
+        # # only used to showcase THRESH_BINARY
+        # dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\binary_threshold63'
+        # os.chdir(dir)
+        # result = cv2.imwrite(filename, binary_threshold63)
+        # if result:
+        #     print("Image saved successfully saved in binary colors to folder binary_threshold63")
+        # else:
+        #     print("Error in saving binary image")
+        #
+        # # only used to showcase THRESH_BINARY
+        # dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\binary_threshold127'
+        # os.chdir(dir)
+        # result = cv2.imwrite(filename, binary_threshold127)
+        # if result:
+        #     print("Image saved successfully saved in binary colors to folder binary_threshold127")
+        # else:
+        #     print("Error in saving binary image")
+        #
+        # # only used to showcase THRESH_BINARY
+        # dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\binary_threshold191'
+        # os.chdir(dir)
+        # result = cv2.imwrite(filename, binary_threshold191)
+        # if result:
+        #     print("Image saved successfully saved in binary colors to folder binary_threshold191")
+        # else:
+        #     print("Error in saving binary image")
+
         dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\binarized'
         os.chdir(dir)
         filename = cmr_nr + '.png'
-        result = cv2.imwrite(filename, binary_m)
         if result:
             print("Image saved successfully saved in binary colors")
         else:
@@ -192,7 +232,6 @@ def preprocess_single_image(image, cmr_nr, show_plots=False, save_images=False):
 
         dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model\Input_left_190\Images\recolorized'
         os.chdir(dir)
-        filename = cmr_nr + '.png'
         result = cv2.imwrite(filename, colorized_from_bin)
         if result:
             print("Image saved successfully saved in color")
@@ -206,15 +245,29 @@ def preprocess_single_image(image, cmr_nr, show_plots=False, save_images=False):
 
         plt.subplot(1, 4, 2)
         plt.title('Greyscale')
-        plt.imshow(gray)
+        plt.imshow(gray, cmap="gray")
 
         plt.subplot(1, 4, 3)
         plt.title('Binary_MEAN')
-        plt.imshow(binary_m)
+        plt.imshow(binary_m, cmap="gray")
 
         plt.subplot(1, 4, 4)
         plt.title('Colorized')
         plt.imshow(colorized_from_bin)
+        plt.show()
+
+        #second plot
+        plt.subplot(1, 3, 1)
+        plt.title('binary thresh 60')
+        plt.imshow(binary_threshold60, cmap="gray")
+
+        plt.subplot(1, 3, 2)
+        plt.title('binary thresh 127')
+        plt.imshow(binary_threshold127, cmap="gray")
+
+        plt.subplot(1, 3, 3)
+        plt.title('binary thresh 191')
+        plt.imshow(binary_threshold191, cmap="gray")
         plt.show()
 
     return output_image
@@ -361,7 +414,6 @@ def show_hsv():
 
 
 # save predictions separately for the digit recognition model
-# TODO the annotations for the DRM are currently done with hand-cropped predictions, it should be possible to crop a prediction automatically to extract it
 def save_predictions(predictions):
     dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\predictions\cropped'
     os.chdir(dir)
@@ -466,6 +518,7 @@ def Plotter(img, predMask, groundTruth, show_predictions=False) -> object:
         plt.show()
 
 
+# show images in a grid. Used to find out the correct crop settings
 def ShowCroppedSerials(cropped_images):
     fraction = 9
     fraction_img_count = int(len(cropped_images) / fraction)
@@ -487,8 +540,8 @@ def ShowCroppedSerials(cropped_images):
 def SaveCroppedSerials(cropped_images):
     dir = r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\digit_recognition_model\Input_cropped\binary'
     os.chdir(dir)
-
     for i in range(len(cropped_images)):
+        cv2.imshow(cropped_images[i])
         filename = 'cropped_cmr' + str(i+1) + '.png'
         noise_image_norm = cv2.normalize(cropped_images[i], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
         result = cv2.imwrite(filename, noise_image_norm)
@@ -496,6 +549,8 @@ def SaveCroppedSerials(cropped_images):
             print("File saved successfully")
         else:
             print("Error in saving file")
+
+        cv2.imshow(noise_image_norm)
 
 
 def WriteUsedSettingsToFileInJson():
@@ -545,8 +600,11 @@ dataFrame = {
 }
 
 # CMR's with serial on the left half of the box (top right on the form)
+# recolorized images used because model requires three color channels,
+# and it's faster to use preprocessed images, rather then repeating this process every time
+os.chdir(r'E:\Programs\PyCharmProjects\Python\Machine Learning Projects\location_recognition_model')
 Iterator('Input_left_190/Images/recolorized', 'Input_left_190/Annotations')
-# Iterator_single('Input_left_190/Images', 'Input_left_190/Annotations')  # requires preprocess_images()
+# Iterator_single('Input_left_190/Images/color', 'Input_left_190/Annotations')  # requires preprocess_single_image()
 
 # full serial box
 # box_w, box_h = 768, 256
@@ -569,7 +627,7 @@ cropImages(100, 840, box_h, box_w)
 training_dropouts = 0
 training_test_size = 0.22
 training_random_state = 22
-training_epochs = 50
+training_epochs = 3
 training_batch_size = 16
 
 training_date = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -583,10 +641,10 @@ inputs = tf.keras.layers.Input((box_h, box_w, 3))
 # inputs = tf.keras.layers.Input((box_h, box_w))
 myTransformer = GiveMeUnet(inputs, dropouts=training_dropouts)
 myTransformer.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
-tf.keras.callbacks.EarlyStopping(
-    monitor='val_loss', min_delta=0, patience=3, verbose=0,
-    mode='auto', baseline=None, restore_best_weights=False
-)
+# tf.keras.callbacks.EarlyStopping(
+#     monitor='val_loss', min_delta=0, patience=3, verbose=0,
+#     mode='auto', baseline=None, restore_best_weights=False
+# )
 retVal = myTransformer.fit(x_train, y_train, validation_data=(x_test, y_test), verbose=1, epochs=training_epochs, batch_size=training_batch_size)
 
 #load model
